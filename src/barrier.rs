@@ -8,11 +8,15 @@ use tokio::prelude::*;
 use std::net::SocketAddr;
 
 pub struct Barrier {
-    zk: ZooKeeper,
+    zookeeper: Option<ZooKeeper>,
     path: &'static str
 }
 
 impl Barrier {
+    pub fn new(path: &'static str) -> Self {
+        Barrier {zookeeper: None, path: path}
+    }
+
     pub fn create(
         mut self,
         addr: &SocketAddr,
@@ -33,8 +37,8 @@ impl Barrier {
                 .and_then(move |(zk, _)| {
                     zk.create(&path, &b"Barrier Node"[..], Acl::open_unsafe(), CreateMode::Persistent)
                 })
-            }).wait().map(|(zk, res)| {
-                self.zk = zk;
+            }).wait().map(|(zookeeper, res)| {
+                self.zookeeper = Some(zookeeper);
                 (self, res)
             })
     }
@@ -42,7 +46,8 @@ impl Barrier {
     pub fn delete(
         self,
         ) ->  Result<Result<(), error::Delete>, failure::Error> {
-        self.zk
+        self.zookeeper
+            .unwrap()
             .delete(self.path, None)
             .inspect(|(_, res)| {
                 match res {
