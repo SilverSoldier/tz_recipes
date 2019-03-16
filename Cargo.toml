@@ -1,0 +1,10 @@
+[package]
+name = "zk_recipes"
+version = "0.1.0"
+authors = ["kavya <soldatargent@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+tokio-zookeeper = "0.1"
+failure = "0.1"
+tokio = "0.1"
