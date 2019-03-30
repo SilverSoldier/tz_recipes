@@ -7,56 +7,53 @@ use tokio_zookeeper::*;
 use tokio::prelude::*;
 use std::net::SocketAddr;
 
+#[derive(Copy, Clone)]
 pub struct Barrier {
-    zookeeper: Option<ZooKeeper>,
+    addr: SocketAddr,
     path: &'static str
 }
 
 impl Barrier {
-    pub fn new(path: &'static str) -> Self {
-        Barrier {zookeeper: None, path: path}
+    pub fn new(path: &'static str, addr: SocketAddr) -> Self {
+        Barrier {addr: addr, path: path}
     }
 
-    pub fn create(
-        mut self,
-        addr: &SocketAddr,
-        path: &'static str,
-        ) -> Result<(Self, Result<String, error::Create>), failure::Error> 
-    {
-        self.path = path;
-        ZooKeeper::connect(addr)
+    /**
+     * Create a new barrier node with the path argument, if it does not exist. Else do nothing.
+     * Ensures first process to execute this creates the parent znode.
+     */
+    pub fn create(self) {
+        ZooKeeper::connect(&self.addr)
             .and_then(move |(zk, default_watcher)| {
                 zk
-                    .exists(path)
+                    .exists(self.path)
                     .inspect(|(_, stat)| {
                         match stat {
-                            Some(_) => return (),
+                            Some(_) => return ,
                             None => (),
                         }
                     })
                 .and_then(move |(zk, _)| {
-                    zk.create(&path, &b"Barrier Node"[..], Acl::open_unsafe(), CreateMode::Persistent)
+                    zk.create(self.path, &b"Barrier Node"[..], Acl::open_unsafe(), CreateMode::Persistent)
                 })
-            }).wait().map(|(zookeeper, res)| {
-                self.zookeeper = Some(zookeeper);
-                (self, res)
-            })
+            });
     }
 
-    pub fn delete(
-        self,
-        ) ->  Result<Result<(), error::Delete>, failure::Error> {
-        self.zookeeper
-            .unwrap()
-            .delete(self.path, None)
-            .inspect(|(_, res)| {
-                match res {
-                    Err (_) => return (),
-                    Ok (_) => (),
-                }
-            })
-        .wait().map(|(_, res)| {
-            res
-        })
+    /** Delete the parent znode if it exists, else do nothing.
+     * Ensures first process deletes the parent znode
+     */
+    pub fn delete(self) {
+        ZooKeeper::connect(&self.addr)
+            .and_then(move |(zk, default_watcher)| {
+                zk
+                    .delete(self.path, None)
+                    .inspect(|(_, res)| {
+                        match res {
+                            Err (_) => return ,
+                            Ok (_) => (),
+                        }
+                    })
+            });
     }
 }
+
