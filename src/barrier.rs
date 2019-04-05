@@ -23,29 +23,19 @@ impl Barrier {
      * exists error.
      * Assuming a main process will call this for setup before barrier usage.
      */
-    pub fn create(self) 
-        -> Result<Result<String, error::Create>, failure::Error> {
-        let res = ZooKeeper::connect(&self.addr)
+    pub fn create(self) {
+        // -> Result<Result<String, error::Create>, failure::Error> {
+        tokio::run(
+            ZooKeeper::connect(&self.addr)
             .and_then(move |(zk, _default_watcher)| {
-                zk
-                    .exists(self.path)
-                    .and_then(move |(zk, _)| {
-                        zk.create(self.path, &b"Barrier Node"[..], Acl::open_unsafe(), CreateMode::Persistent)
-                    })
-                .inspect(|(_, stat)| {
-                    println!("{:?}", stat);
-                })
+                zk.create(self.path, &b"Barrier Node"[..], Acl::open_unsafe(), CreateMode::Persistent)
             })
-        .wait();
-        if res.is_err() {
-            return Err(res.err().unwrap());
-        } else {
-            res.map(|(_, res)| { // item = <Self, Result<String, err>>
-                res
+            .inspect(|(_, stat)| {
+                println!("{:?}", stat);
             })
-        }
-        // .map(|_| ())
-        //     .map_err(|e| panic!("{:?}", e)),
+            .map(|_| ())
+            .map_err(|e| panic!("{:?}", e)),
+        );
     }
 
     /** Delete barrier node with the path argument, if it exists. Else return file does not
@@ -65,5 +55,5 @@ impl Barrier {
                     })
             }).wait().map(|(_, res)| { res })
     }
-}
+    }
 
