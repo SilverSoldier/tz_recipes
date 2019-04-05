@@ -19,32 +19,42 @@ impl Barrier {
     }
 
     /**
-     * Create a new barrier node with the path argument, if it does not exist. Else do nothing.
-     * Ensures first process to execute this creates the parent znode.
+     * Create a new barrier node with the path argument, if it does not exist. Else return file
+     * exists error.
+     * Assuming a main process will call this for setup before barrier usage.
      */
-    pub fn create(self) {
-        ZooKeeper::connect(&self.addr)
-            .and_then(move |(zk, default_watcher)| {
+    pub fn create(self) 
+        -> Result<Result<String, error::Create>, failure::Error> {
+        let res = ZooKeeper::connect(&self.addr)
+            .and_then(move |(zk, _default_watcher)| {
                 zk
                     .exists(self.path)
-                    .inspect(|(_, stat)| {
-                        match stat {
-                            Some(_) => return ,
-                            None => (),
-                        }
+                    .and_then(move |(zk, _)| {
+                        zk.create(self.path, &b"Barrier Node"[..], Acl::open_unsafe(), CreateMode::Persistent)
                     })
-                .and_then(move |(zk, _)| {
-                    zk.create(self.path, &b"Barrier Node"[..], Acl::open_unsafe(), CreateMode::Persistent)
+                .inspect(|(_, stat)| {
+                    println!("{:?}", stat);
                 })
-            });
+            })
+        .wait();
+        if res.is_err() {
+            return Err(res.err().unwrap());
+        } else {
+            res.map(|(_, res)| { // item = <Self, Result<String, err>>
+                res
+            })
+        }
+        // .map(|_| ())
+        //     .map_err(|e| panic!("{:?}", e)),
     }
 
-    /** Delete the parent znode if it exists, else do nothing.
-     * Ensures first process deletes the parent znode
+    /** Delete barrier node with the path argument, if it exists. Else return file does not
+     * exist error.
+     * Assuming a main process will call this for tear down after barrier usage.
      */
-    pub fn delete(self) {
+    pub fn delete(self) -> Result<Result<(), error::Delete>, failure::Error> {
         ZooKeeper::connect(&self.addr)
-            .and_then(move |(zk, default_watcher)| {
+            .and_then(move |(zk, _default_watcher)| {
                 zk
                     .delete(self.path, None)
                     .inspect(|(_, res)| {
@@ -53,7 +63,7 @@ impl Barrier {
                             Ok (_) => (),
                         }
                     })
-            });
+            }).wait().map(|(_, res)| { res })
     }
 }
 
