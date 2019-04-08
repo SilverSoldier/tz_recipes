@@ -23,28 +23,18 @@ impl Barrier {
      * exists error.
      * Assuming a main process will call this for setup before barrier usage.
      */
-    pub fn create(self) -> Result<String, error::Create> {
-        let mut create_error: Option<error::Create> = None;
+    pub fn create(self) {
         tokio::run(
             ZooKeeper::connect(&self.addr)
             .and_then(move |(zk, _default_watcher)| {
                 zk.create(self.path, &b"Barrier Node"[..], Acl::open_unsafe(), CreateMode::Persistent)
             })
             .inspect(move |(_, stat)| {
-                match stat {
-                    Ok(_) => (),
-                    Err(err) => { 
-                        create_error = Some(*err);
-                    }
-                }
+                println!("{:?}", stat)
             })
             .map(|_| ())
             .map_err(|e| panic!("{:?}", e))
         );
-        match create_error {
-            Some(err) => Err(err),
-            None => Ok(String::from("Barrier node created/already exists"))
-        }
     }
 
     /** Delete barrier node with the path argument, if it exists. Else return file does not
